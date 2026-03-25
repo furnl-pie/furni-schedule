@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>퍼니환경 스케줄 정리기</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Malgun Gothic', Arial, sans-serif; background: #f0f4f8; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .card { background: white; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.10); padding: 36px 40px; max-width: 520px; width: 100%; }
+  .logo { text-align: center; margin-bottom: 28px; }
+  .logo h1 { font-size: 22px; color: #2F5496; font-weight: 700; margin-bottom: 4px; }
+  .logo p  { font-size: 13px; color: #888; }
+  .section { margin-bottom: 20px; }
+  label { display: block; font-size: 13px; font-weight: 600; color: #444; margin-bottom: 6px; }
+  .drop-zone {
+    border: 2px dashed #b0c4e8; border-radius: 10px; padding: 28px 20px;
+    text-align: center; cursor: pointer; transition: all 0.2s; background: #f8faff;
+  }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: #2F5496; background: #eef3ff; }
+  .drop-zone .icon { font-size: 32px; margin-bottom: 8px; }
+  .drop-zone .hint { font-size: 13px; color: #888; }
+  .drop-zone .filename { font-size: 13px; color: #2F5496; font-weight: 600; margin-top: 6px; }
+  .date-row { display: flex; gap: 12px; align-items: center; }
+  .date-row input { flex: 1; padding: 9px 12px; border: 1.5px solid #d0d8e8; border-radius: 8px; font-size: 13px; font-family: inherit; }
+  .date-row input:focus { outline: none; border-color: #2F5496; }
+  .date-row span { color: #888; font-size: 13px; }
+  .btn {
+    width: 100%; padding: 14px; background: #2F5496; color: white; border: none;
+    border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer;
+    font-family: inherit; transition: background 0.2s; margin-top: 4px;
+  }
+  .btn:hover { background: #1e3a6e; }
+  .btn:disabled { background: #aab8cc; cursor: not-allowed; }
+  .btn.success { background: #217346; }
+  .progress { margin-top: 16px; display: none; }
+  .progress-bar-wrap { background: #eee; border-radius: 99px; height: 8px; overflow: hidden; margin-bottom: 8px; }
+  .progress-bar { height: 100%; background: #2F5496; border-radius: 99px; width: 0; transition: width 0.3s; }
+  .progress-text { font-size: 12px; color: #666; text-align: center; }
+  .result { margin-top: 16px; padding: 14px 16px; border-radius: 10px; font-size: 13px; display: none; }
+  .result.ok  { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+  .result.err { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 14px; }
+  .stat-box { background: #f0f4ff; border-radius: 8px; padding: 10px; text-align: center; }
+  .stat-num { font-size: 22px; font-weight: 700; color: #2F5496; }
+  .stat-lbl { font-size: 11px; color: #666; margin-top: 2px; }
+  .guide { background: #f0f4ff; border: 1px solid #c8d8f5; border-radius: 10px; padding: 12px 14px; margin-bottom: 20px; }
+  .guide-title { font-size: 11px; font-weight: 700; color: #2F5496; margin-bottom: 8px; letter-spacing: 0.3px; }
+  .guide-steps { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .guide-step { background: white; border: 1px solid #c8d8f5; border-radius: 6px; padding: 4px 10px; font-size: 12px; color: #333; white-space: nowrap; }
+  .guide-arrow { color: #2F5496; font-size: 13px; font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <h1>📋 퍼니환경 스케줄 정리기</h1>
+    <p>카카오톡 대화 텍스트 → 엑셀 자동 변환</p>
+  </div>
+
+  <div class="guide">
+    <div class="guide-title">📱 카카오톡 파일 내보내기 방법</div>
+    <div class="guide-steps">
+      <div class="guide-step">채팅방 열기</div>
+      <div class="guide-arrow">→</div>
+      <div class="guide-step">우측 상단 더보기 ☰</div>
+      <div class="guide-arrow">→</div>
+      <div class="guide-step">대화내용</div>
+      <div class="guide-arrow">→</div>
+      <div class="guide-step">대화 내보내기</div>
+      <div class="guide-arrow">→</div>
+      <div class="guide-step">아래 업로드 ⬇</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <label>① 카카오톡 텍스트 파일 선택</label>
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <div class="icon">📂</div>
+      <div class="hint">클릭하거나 파일을 여기에 드래그하세요<br><small>.txt 파일만 지원</small></div>
+      <div class="filename" id="fileName"></div>
+    </div>
+    <input type="file" id="fileInput" accept=".txt" style="display:none">
+  </div>
+
+  <div class="section">
+    <label>② 작업예정일 범위 입력</label>
+    <div class="date-row">
+      <input type="date" id="startDate" value="2026-03-22">
+      <span>~</span>
+      <input type="date" id="endDate" value="2026-03-31">
+    </div>
+  </div>
+
+  <button class="btn" id="runBtn" onclick="run()" disabled>엑셀 생성하기</button>
+
+  <div class="progress" id="progress">
+    <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+    <div class="progress-text" id="progressText">처리 중...</div>
+  </div>
+
+  <div class="result" id="result"></div>
+  <div class="stat-grid" id="statGrid" style="display:none">
+    <div class="stat-box"><div class="stat-num" id="statTotal">0</div><div class="stat-lbl">총 건수</div></div>
+    <div class="stat-box"><div class="stat-num" id="statDays">0</div><div class="stat-lbl">날짜 수</div></div>
+    <div class="stat-box"><div class="stat-num" id="statPhoto">0</div><div class="stat-lbl">사진첨부</div></div>
+  </div>
+</div>
+
+<script>
+let fileContent = null;
+
+// 드래그&드롭
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) loadFile(file);
+});
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (e.target.files[0]) loadFile(e.target.files[0]);
+});
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    fileContent = ev.target.result;
+    document.getElementById('fileName').textContent = '✅ ' + file.name;
+    document.getElementById('runBtn').disabled = false;
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function setProgress(pct, txt) {
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('progressText').textContent = txt;
+}
+
+function normPhone(p) {
+  p = p.replace(/[\s\-]/g,'');
+  if (p.length === 11) return p.slice(0,3)+'-'+p.slice(3,7)+'-'+p.slice(7);
+  return p;
+}
+
+function toDateObj(ds, chatDate) {
+  let m = ds.match(/(\d+)월(\d+)일/);
+  if (m) {
+    try { return new Date(2026, parseInt(m[1])-1, parseInt(m[2])); } catch(e) { return null; }
+  }
+  if (ds.includes('당일')) {
+    let m2 = chatDate.match(/(\d{4})년\s*(\d+)월\s*(\d+)일/);
+    if (m2) return new Date(parseInt(m2[1]), parseInt(m2[2])-1, parseInt(m2[3]));
+  }
+  return null;
+}
+
+function extractPw(lines, type) {
+  const pats = type === '공동'
+    ? [/^공동현관\s*[:.：]?\s*(.+)/, /^공동비번\s*[:.：]?\s*(.+)/, /^공동\s*[:.：]?\s*(.+)/]
+    : [/^세대비밀번호\s*[:.：]?\s*(.+)/, /^세대비번\s*[:.：]?\s*(.+)/, /^세대\s*[:.：]?\s*([#\d\*\+\s\w]+)/];
+  for (const line of lines) {
+    for (const pat of pats) {
+      const m = line.match(pat);
+      if (m) {
+        const val = m[1].trim();
+        if (type === '세대' && /폐기|보양|마감|작업|마루|엘베|동선|층/.test(val)) continue;
+        return val.slice(0, 50);
+      }
+    }
+  }
+  return '';
+}
+
+function parseMsg(sender, mlines, chatDate, start, end) {
+  const text = mlines.join('\n').trim();
+  if (!text) return null;
+  const hasPhoto = /사진(\s*\d+장)?$/.test(text.trim()) || text.includes('사진첨부') || text.includes('사진 첨부');
+  if (/^사진(\s*\d+장)?$/.test(text.trim())) return null;
+  if (text.includes('메시지가 삭제')) return null;
+
+  const ll = text.split('\n').map(l => l.trim()).filter(Boolean);
+  if (ll.length < 2) return null;
+
+  const fl = ll[0];
+  const isChg = /\*\*(일정변경|시간변경)/.test(fl);
+  const isCan = /일정취소/.test(fl);
+
+  const clean = fl.replace(/\s*\*+[^\n]*/g,'').trim();
+  const cm = clean.match(/^(.+?)[(（](.+?)[)）]/);
+  const company = cm ? cm[1].trim() : clean.trim();
+  const person  = cm ? cm[2].trim() : '';
+  if (!company) return null;
+
+  let sd = '', st = '';
+  for (const line of ll.slice(1,5)) {
+    const arrow = line.match(/(?:-->|->>|>>|>)\s*(\d+월\d+일[^\s]*)/);
+    if (arrow && isChg) {
+      sd = arrow[1];
+      const after = line.slice(line.indexOf(arrow[0]) + arrow[0].length);
+      const tm = (after + arrow[1]).match(/오[전후]\d+시\S*/);
+      st = tm ? tm[0] : '';
+      break;
+    }
+    const dm = line.match(/^(\d+월\d+일[^\s]*)/);
+    if (dm) {
+      sd = dm[1];
+      const ta = line.match(/(?:-->|>>)\s*(오[전후]\d+시\S*)/);
+      if (ta && isChg) { st = ta[1]; }
+      else {
+        const tm = line.match(/오[전후]\d+(?:시\d*분?)?(?:[-~]\S+)?/);
+        st = tm ? tm[0] : (line.includes('오전중') ? '오전중' : line.includes('오후중') ? '오후중' : line.includes('당일중') ? '당일중' : line.includes('첫타임') ? '첫타임' : '');
+      }
+      break;
+    }
+    if (line.includes('당일')) {
+      sd = '당일';
+      const tm = line.match(/오[전후]\d+(?:시\d*분?)?(?:[-~]\S+)?/);
+      st = tm ? tm[0] : (line.includes('오전중') ? '오전중' : line.includes('오후중') ? '오후중' : '당일중');
+      break;
+    }
+  }
+  if (!sd) return null;
+
+  const dobj = toDateObj(sd, chatDate);
+  if (!dobj) return null;
+  if (dobj < start || dobj > end) return null;
+
+  let addr = '';
+  for (const line of ll.slice(1)) {
+    if (/구|동|로|길|아파트|빌라|타운|푸르지오|래미안|자이|힐스테이트|더샵|위브|파크|리슈빌|시티/.test(line)) {
+      if (!/^(공동|세대|비번|작업|지하|지상|승강기|엘베|동선|공용|※|현장명)/.test(line)) { addr = line; break; }
+    }
+  }
+
+  let phone = '';
+  for (const line of ll) {
+    const pm = line.match(/0\d{1,2}[\s\-]?\d{3,4}[\s\-]?\d{4}/);
+    if (pm) { phone = normPhone(pm[0]); break; }
+  }
+
+  let qty = '';
+  for (const line of ll) {
+    const cm2 = line.match(/\d+\/\d+차/);
+    if (cm2) { qty = cm2[0]; break; }
+    if (line.includes('소량') && !qty) qty = '소량';
+    if (line.includes('2.5톤') && !qty) qty = '2.5톤';
+    if (line.includes('1톤') && !qty) qty = '1톤';
+  }
+
+  const pwCommon = extractPw(ll.slice(1), '공동');
+  const pwUnit   = extractPw(ll.slice(1), '세대');
+
+  const noteParts = ll.slice(1)
+    .filter(l => /^[\*>※]/.test(l) && l.replace(/^[\*>※\s]+/,'').trim() && !/^(공동|세대|비번)/.test(l.replace(/^[\*>※\s]+/,'')))
+    .map(l => l.replace(/^[\*>※\s]+/,'').trim());
+  if (hasPhoto) noteParts.unshift('사진첨부');
+
+  return { company, person, dateObj: dobj, schedDate: sd, schedTime: st,
+           address: addr, phone, qty, notes: noteParts.join(' | '),
+           pwCommon, pwUnit, isChange: isChg, isCancel: isCan };
+}
+
+function classifyTime(st) {
+  // 0=오전시간, 1=오전중, 2=오후시간, 3=오후중, 4=당일중/기타
+  if (!st) return 4;
+  if (st.includes('당일중')) return 4;
+  if (st.includes('첫타임')) return 0;
+  if (st.includes('오전중')) return 1;
+  if (st.includes('오후중')) return 3;
+  if (st.startsWith('오전') && /\d/.test(st)) return 0;
+  if (st.startsWith('오후') && /\d/.test(st)) return 2;
+  return 4;
+}
+
+function timeSortVal(st) {
+  // 실제 분(minutes) 기준 오름차순 — 오후12시=정오(720) < 오후1시(780) 보장
+  if (!st) return 9999;
+  if (st.includes('첫타임')) return 0;
+  const firstPart = st.split(/[-~]/)[0];
+  let base, rest;
+  if (firstPart.startsWith('오전')) { base = 0;   rest = firstPart.slice(2); }
+  else if (firstPart.startsWith('오후')) { base = 720; rest = firstPart.slice(2); }
+  else return 9999;
+  const hm = rest.match(/^(\d+)/);
+  if (!hm) return 9999;
+  const h = parseInt(hm[1]);
+  const minM = rest.match(/시(\d+)분/);
+  const m = minM ? parseInt(minM[1]) : (rest.includes('반') ? 30 : 0);
+  // 오후: 12시=0분offset, 1시=60분offset, 2시=120분 ...
+  if (firstPart.startsWith('오후')) {
+    return base + (h === 12 ? 0 : h * 60) + m;
+  }
+  return h * 60 + m;
+}
+
+function fmtDate(d) {
+  const days = ['일','월','화','수','목','금','토'];
+  return `${d.getMonth()+1}월 ${d.getDate()}일(${days[d.getDay()]})`;
+}
+
+async function run() {
+  if (!fileContent) return;
+  const startStr = document.getElementById('startDate').value;
+  const endStr   = document.getElementById('endDate').value;
+  if (!startStr || !endStr) { alert('날짜 범위를 입력해주세요.'); return; }
+
+  const startParts = startStr.split('-');
+  const endParts   = endStr.split('-');
+  const start = new Date(+startParts[0], +startParts[1]-1, +startParts[2]);
+  const end   = new Date(+endParts[0],   +endParts[1]-1,   +endParts[2]);
+
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  document.getElementById('progress').style.display = 'block';
+  document.getElementById('result').style.display = 'none';
+  document.getElementById('statGrid').style.display = 'none';
+  setProgress(10, '파일 분석 중...');
+
+  await new Promise(r => setTimeout(r, 30));
+
+  const lines = fileContent.split(/\r?\n/);
+  const datePat = /[-]+\s*(\d{4})년\s*(\d+)월\s*(\d+)일\s*\w+요일\s*[-]+/;
+  const msgPat  = /^\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)/;
+
+  let curDate = '', curSender = '', curLines = [], inMsg = false;
+  const parsedSeq = [];
+
+  setProgress(30, '메시지 파싱 중...');
+  await new Promise(r => setTimeout(r, 30));
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\r/,'');
+    const dm = line.match(datePat);
+    if (dm) {
+      if (inMsg && curLines.length) {
+        const txt = curLines.join('\n').trim();
+        if (/^사진(\s*\d+장)?$/.test(txt)) parsedSeq.push({type:'photo'});
+        else { const e = parseMsg(curSender, curLines, curDate, start, end); if (e) parsedSeq.push({type:'entry', data:e}); }
+      }
+      curDate = line; inMsg = false; continue;
+    }
+    const mm = line.match(msgPat);
+    if (mm) {
+      if (inMsg && curLines.length) {
+        const txt = curLines.join('\n').trim();
+        if (/^사진(\s*\d+장)?$/.test(txt)) parsedSeq.push({type:'photo'});
+        else { const e = parseMsg(curSender, curLines, curDate, start, end); if (e) parsedSeq.push({type:'entry', data:e}); }
+      }
+      curSender = mm[1]; curLines = mm[3] ? [mm[3]] : []; inMsg = true;
+    } else if (inMsg) {
+      curLines.push(line);
+    }
+  }
+  if (inMsg && curLines.length) {
+    const txt = curLines.join('\n').trim();
+    if (/^사진(\s*\d+장)?$/.test(txt)) parsedSeq.push({type:'photo'});
+    else { const e = parseMsg(curSender, curLines, curDate, start, end); if (e) parsedSeq.push({type:'entry', data:e}); }
+  }
+
+  // 사진 메시지 → 직전 엔트리에 표시
+  for (let i = 0; i < parsedSeq.length; i++) {
+    if (parsedSeq[i].type === 'photo') {
+      for (let j = i-1; j >= 0; j--) {
+        if (parsedSeq[j].type === 'entry') {
+          const e = parsedSeq[j].data;
+          if (!e.notes.includes('사진첨부')) e.notes = ('사진첨부 | ' + e.notes).replace(/\s*\|\s*$/, '');
+          break;
+        }
+      }
+    }
+  }
+
+  const entries = parsedSeq.filter(p => p.type === 'entry').map(p => p.data);
+  // 날짜순 정렬만 (그룹 내 정렬은 아래서 처리)
+  entries.sort((a,b) => a.dateObj - b.dateObj);
+
+  if (entries.length === 0) {
+    document.getElementById('progress').style.display = 'none';
+    const r = document.getElementById('result');
+    r.className = 'result err'; r.textContent = '해당 기간에 일정이 없습니다. 날짜 범위를 확인해주세요.';
+    r.style.display = 'block'; btn.disabled = false; return;
+  }
+
+  setProgress(60, '엑셀 생성 중...');
+  await new Promise(r => setTimeout(r, 30));
+
+  // ── Build Excel ────────────────────────────────────────────────────────────
+  const wb = XLSX.utils.book_new();
+  const wsData = [];
+  const headers = ['날짜','업체명(담당자)','현장주소','작업시간','연락처','폐기물양','비고','공동비번','세대비번'];
+  wsData.push(headers);
+
+  // 날짜별 그룹
+  const dayMap = {};
+  for (const e of entries) {
+    const key = e.dateObj.toISOString().slice(0,10);
+    if (!dayMap[key]) dayMap[key] = [];
+    dayMap[key].push(e);
+  }
+
+  const merges = [];
+  let rowIdx = 1;
+
+  for (const key of Object.keys(dayMap).sort()) {
+    const dayEntries = dayMap[key];
+    const d = new Date(key + 'T00:00:00');
+    const label = `📅  ${fmtDate(d)}  (${dayEntries.length}건)`;
+
+    // 날짜 헤더 (병합)
+    wsData.push([label,'','','','','','','','']);
+    merges.push({ s:{r:rowIdx,c:0}, e:{r:rowIdx,c:8} });
+    rowIdx++;
+
+    // 5개 버킷으로 분류
+    const buckets = [[], [], [], [], []];
+    for (const e of dayEntries) buckets[classifyTime(e.schedTime)].push(e);
+    // 오전/오후 시간대 오름차순 정렬
+    buckets[0].sort((a,b) => timeSortVal(a.schedTime) - timeSortVal(b.schedTime));
+    buckets[2].sort((a,b) => timeSortVal(a.schedTime) - timeSortVal(b.schedTime));
+
+    let firstBucket = true;
+    for (let g = 0; g < 5; g++) {
+      if (!buckets[g].length) continue;
+      // 그룹 간 2줄 여백
+      if (!firstBucket) {
+        wsData.push(['','','','','','','','','']);
+        wsData.push(['','','','','','','','','']);
+        rowIdx += 2;
+      }
+      firstBucket = false;
+
+      for (const e of buckets[g]) {
+        const coStr = e.person ? `${e.company}(${e.person})` : e.company;
+        wsData.push([fmtDate(e.dateObj), coStr, e.address, e.schedTime,
+                     e.phone, e.qty, e.notes, e.pwCommon, e.pwUnit]);
+        rowIdx++;
+      }
+    }
+    // 날짜 사이 1줄 여백
+    wsData.push(['','','','','','','','','']);
+    rowIdx++;
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!merges'] = merges;
+
+  ws['!cols'] = [
+    {wch:14},{wch:26},{wch:48},{wch:16},{wch:16},{wch:10},{wch:36},{wch:24},{wch:16}
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, `일정_${startStr.slice(5).replace('-','.')}~${endStr.slice(5).replace('-','.')}`);
+
+  setProgress(90, '파일 저장 중...');
+  await new Promise(r => setTimeout(r, 30));
+
+  const fname = `퍼니환경_일정_${startStr.replace(/-/g,'')}_${endStr.replace(/-/g,'')}.xlsx`;
+  XLSX.writeFile(wb, fname);
+
+  setProgress(100, '완료!');
+
+  // 통계
+  const photoCnt = entries.filter(e => e.notes.includes('사진첨부')).length;
+  const uniqueDays = Object.keys(groups).length;
+  document.getElementById('statTotal').textContent = entries.length;
+  document.getElementById('statDays').textContent  = uniqueDays;
+  document.getElementById('statPhoto').textContent = photoCnt;
+  document.getElementById('statGrid').style.display = 'grid';
+
+  const r = document.getElementById('result');
+  r.className = 'result ok';
+  r.textContent = `✅ ${fname} 다운로드 완료! 총 ${entries.length}건 / ${uniqueDays}일치 정리됐습니다.`;
+  r.style.display = 'block';
+
+  btn.textContent = '다시 생성하기';
+  btn.className = 'btn success';
+  btn.disabled = false;
+}
+</script>
+</body>
+</html>
