@@ -50,6 +50,7 @@
   .guide-steps { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
   .guide-step { background: white; border: 1px solid #c8d8f5; border-radius: 6px; padding: 4px 10px; font-size: 12px; color: #333; white-space: nowrap; }
   .guide-arrow { color: #2F5496; font-size: 13px; font-weight: 700; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
@@ -84,16 +85,16 @@
     <input type="file" id="fileInput" accept=".txt" style="display:none">
   </div>
 
-  <div class="section">
+  <div class="section" id="dateSection" style="display:none; animation: fadeIn 0.3s ease;">
     <label>② 작업예정일 범위 입력</label>
     <div class="date-row">
-      <input type="date" id="startDate" value="2026-03-22">
+      <input type="date" id="startDate">
       <span>~</span>
-      <input type="date" id="endDate" value="2026-03-31">
+      <input type="date" id="endDate">
     </div>
   </div>
 
-  <button class="btn" id="runBtn" onclick="run()" disabled>엑셀 생성하기</button>
+  <button class="btn" id="runBtn" onclick="run()" style="display:none; animation: fadeIn 0.3s ease;">엑셀 생성하기</button>
 
   <div class="progress" id="progress">
     <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
@@ -129,7 +130,20 @@ function loadFile(file) {
   reader.onload = ev => {
     fileContent = ev.target.result;
     document.getElementById('fileName').textContent = '✅ ' + file.name;
-    document.getElementById('runBtn').disabled = false;
+
+    // 파일명에서 날짜 추측 (예: KakaoTalk_20260325_...)
+    const dateMatch = file.name.match(/(\d{4})(\d{2})(\d{2})/);
+    if (dateMatch) {
+      const y = dateMatch[1], m = dateMatch[2], d = dateMatch[3];
+      // 파일 날짜 ~ 해당 월 말일
+      const lastDay = new Date(+y, +m, 0).getDate();
+      document.getElementById('startDate').value = `${y}-${m}-${d}`;
+      document.getElementById('endDate').value   = `${y}-${m}-${String(lastDay).padStart(2,'0')}`;
+    }
+
+    // 날짜 입력 + 버튼 표시
+    document.getElementById('dateSection').style.display = 'block';
+    document.getElementById('runBtn').style.display = 'block';
   };
   reader.readAsText(file, 'UTF-8');
 }
