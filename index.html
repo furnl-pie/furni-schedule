@@ -219,20 +219,20 @@ function parseMsg(sender, mlines, chatDate, start, end) {
       st = tm ? tm[0] : '';
       break;
     }
-    const dm = line.match(/^(\d+월\d+일[^\s]*)/);
+    const dm = line.match(/^(\d+월\s*\d+일[^\s]*)/);
     if (dm) {
-      sd = dm[1];
+      sd = dm[1].replace(/\s/g, ''); // 공백 제거해서 "3월27일" 형태로 통일
       const ta = line.match(/(?:-->|>>)\s*(오[전후]\d+시\S*)/);
       if (ta && isChg) { st = ta[1]; }
       else {
         const tm = line.match(/오[전후]\d+(?:시\d*분?)?(?:[-~]\S+)?/);
         st = tm ? tm[0] : (
-          line.includes('첫타임') ? '첫타임' :
-          line.includes('막타임') ? '막타임' :
-          line.includes('점심이후') || line.includes('점심 이후') ? '점심이후' :
-          line.includes('오전중') ? '오전중' :
-          line.includes('오후중') ? '오후중' :
-          line.includes('당일중') ? '당일중' : '');
+          line.includes('첫타임')                                      ? '첫타임'   :
+          line.includes('막타임')                                      ? '막타임'   :
+          (line.includes('점심이후') || line.includes('점심 이후'))    ? '점심이후' :
+          line.includes('오전중')                                      ? '오전중'   :
+          line.includes('오후중')                                      ? '오후중'   :
+          line.includes('당일중')                                      ? '당일중'   : '');
       }
       break;
     }
@@ -408,44 +408,63 @@ async function run() {
     }
   }
 
-  // ── 중복 제거: 전화번호(없으면 업체명) 기준으로 최신 메시지로 덮어쓰기 ──
-  // 순서대로 처리하면서 Map에 upsert → 나중에 온 것이 최신
-  function entryKey(e) {
+  // ── 중복/변경/취소 처리 ──────────────────────────────────────────────────
+  // phoneMap: 전화번호 → 현재 등록된 entryKey (날짜 변경 추적용)
+  const entryMap  = new Map(); // entryKey(phone_date or company_addr_date) → entry
+  const phoneMap  = new Map(); // phone → entryKey  (변경 시 원본 찾기용)
+  const entryOrder = [];       // 등록 순서 유지
+
+  function makeKey(e) {
     const ph = e.phone ? e.phone.replace(/[\s\-]/g,'') : '';
-    const d = e.dateObj;
-    const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
-    // 전화번호+날짜로 키 생성 (같은 업체가 다른 날 다른 현장에 있는 경우 구분)
-    if (ph.length >= 10) return `${ph}_${dateStr}`;
-    return `${e.company}_${e.address.slice(0,15)}_${dateStr}`;
+    const d  = e.dateObj;
+    const ds = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+    if (ph.length >= 10) return `${ph}_${ds}`;
+    return `${e.company}_${e.address.slice(0,15)}_${ds}`;
   }
 
-  const entryMap = new Map(); // key → entry (순서 보존용 배열 인덱스)
-  const entryOrder = [];      // 최초 등록 순서 유지
-
   for (const e of parsedSeq.filter(p => p.type === 'entry').map(p => p.data)) {
-    const key = entryKey(e);
+    const ph  = e.phone ? e.phone.replace(/[\s\-]/g,'') : '';
+    const key = makeKey(e);
 
     if (e.isCancel) {
-      // 취소 → 기존 항목 삭제
-      entryMap.delete(key);
+      // 전화번호로 원본 키 찾아서 삭제
+      const origKey = ph.length >= 10 ? phoneMap.get(ph) : key;
+      if (origKey) {
+        entryMap.delete(origKey);
+        phoneMap.delete(ph);
+      }
       continue;
     }
 
-    if (e.isChange && entryMap.has(key)) {
-      // 일정/시간 변경 → 기존 항목의 날짜·시간만 업데이트
-      const existing = entryMap.get(key);
-      existing.dateObj   = e.dateObj;
-      existing.schedDate = e.schedDate;
-      existing.schedTime = e.schedTime || existing.schedTime;
-      // 비고에 사진첨부 있으면 합치기
-      if (e.notes.includes('사진첨부') && !existing.notes.includes('사진첨부')) {
-        existing.notes = ('사진첨부 | ' + existing.notes).replace(/\s*\|\s*$/, '');
+    if (e.isChange) {
+      // 전화번호로 원본 항목 찾아서 날짜·시간 업데이트
+      const origKey = ph.length >= 10 ? phoneMap.get(ph) : null;
+      if (origKey && entryMap.has(origKey)) {
+        const existing = entryMap.get(origKey);
+        // 날짜가 바뀌면 기존 키 삭제 후 새 키로 재등록
+        const newKey = makeKey(e);
+        if (origKey !== newKey) {
+          entryMap.delete(origKey);
+          entryOrder.push(newKey);
+        }
+        existing.dateObj   = e.dateObj;
+        existing.schedDate = e.schedDate;
+        existing.schedTime = e.schedTime || existing.schedTime;
+        if (e.notes.includes('사진첨부') && !existing.notes.includes('사진첨부')) {
+          existing.notes = ('사진첨부 | ' + existing.notes).replace(/\s*\|\s*$/, '');
+        }
+        entryMap.set(newKey, existing);
+        if (!entryOrder.includes(newKey)) entryOrder.push(newKey);
+        if (ph.length >= 10) phoneMap.set(ph, newKey);
+        continue;
       }
-    } else {
-      // 새 항목 or 변경인데 원본 없는 경우 → 그냥 추가/덮어쓰기
-      if (!entryMap.has(key)) entryOrder.push(key);
-      entryMap.set(key, e);
+      // 원본 없으면 그냥 새 항목으로 추가
     }
+
+    // 일반 등록 or 원본 없는 변경
+    if (!entryMap.has(key)) entryOrder.push(key);
+    entryMap.set(key, e);
+    if (ph.length >= 10) phoneMap.set(ph, key);
   }
 
   // 날짜 범위 내 항목만 필터링
