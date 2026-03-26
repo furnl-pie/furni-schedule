@@ -240,7 +240,8 @@ function parseMsg(sender, mlines, chatDate, start, end) {
 
   const dobj = toDateObj(sd, chatDate);
   if (!dobj) return null;
-  if (dobj < start || dobj > end) return null;
+  // 일정변경/취소는 범위 밖이어도 파싱 (원본 항목 업데이트/삭제용)
+  if (!isChg && !isCan && (dobj < start || dobj > end)) return null;
 
   let addr = '';
   for (const line of ll.slice(1)) {
@@ -387,8 +388,49 @@ async function run() {
     }
   }
 
-  const entries = parsedSeq.filter(p => p.type === 'entry').map(p => p.data);
-  // 날짜순 정렬만 (그룹 내 정렬은 아래서 처리)
+  // ── 중복 제거: 전화번호(없으면 업체명) 기준으로 최신 메시지로 덮어쓰기 ──
+  // 순서대로 처리하면서 Map에 upsert → 나중에 온 것이 최신
+  function entryKey(e) {
+    const ph = e.phone ? e.phone.replace(/[\s\-]/g,'') : '';
+    return ph.length >= 10 ? ph : (e.company + e.address.slice(0,10));
+  }
+
+  const entryMap = new Map(); // key → entry (순서 보존용 배열 인덱스)
+  const entryOrder = [];      // 최초 등록 순서 유지
+
+  for (const e of parsedSeq.filter(p => p.type === 'entry').map(p => p.data)) {
+    const key = entryKey(e);
+
+    if (e.isCancel) {
+      // 취소 → 기존 항목 삭제
+      entryMap.delete(key);
+      continue;
+    }
+
+    if (e.isChange && entryMap.has(key)) {
+      // 일정/시간 변경 → 기존 항목의 날짜·시간만 업데이트
+      const existing = entryMap.get(key);
+      existing.dateObj   = e.dateObj;
+      existing.schedDate = e.schedDate;
+      existing.schedTime = e.schedTime || existing.schedTime;
+      // 비고에 사진첨부 있으면 합치기
+      if (e.notes.includes('사진첨부') && !existing.notes.includes('사진첨부')) {
+        existing.notes = ('사진첨부 | ' + existing.notes).replace(/\s*\|\s*$/, '');
+      }
+    } else {
+      // 새 항목 or 변경인데 원본 없는 경우 → 그냥 추가/덮어쓰기
+      if (!entryMap.has(key)) entryOrder.push(key);
+      entryMap.set(key, e);
+    }
+  }
+
+  // 날짜 범위 내 항목만 필터링
+  const entries = entryOrder
+    .filter(k => entryMap.has(k))
+    .map(k => entryMap.get(k))
+    .filter(e => e.dateObj >= start && e.dateObj <= end);
+
+  // 날짜순 정렬 (그룹 내 정렬은 아래서 처리)
   entries.sort((a,b) => a.dateObj - b.dateObj);
 
   if (entries.length === 0) {
