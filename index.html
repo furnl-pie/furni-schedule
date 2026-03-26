@@ -196,7 +196,7 @@ function parseMsg(sender, mlines, chatDate, start, end) {
   if (text.includes('메시지가 삭제')) return null;
 
   const ll = text.split('\n').map(l => l.trim()).filter(Boolean);
-  if (ll.length < 2) return null;
+  if (ll.length < 1) return null;
 
   const fl = ll[0];
   const isChg = /\*\*(일정변경|시간변경)/.test(fl);
@@ -209,7 +209,8 @@ function parseMsg(sender, mlines, chatDate, start, end) {
   if (!company) return null;
 
   let sd = '', st = '';
-  for (const line of ll.slice(1,5)) {
+  // 첫 줄은 업체명이므로 2번째 줄부터 탐색, 최대 6줄
+  for (const line of ll.slice(1, 7)) {
     const arrow = line.match(/(?:-->|->>|>>|>)\s*(\d+월\d+일[^\s]*)/);
     if (arrow && isChg) {
       sd = arrow[1];
@@ -225,14 +226,25 @@ function parseMsg(sender, mlines, chatDate, start, end) {
       if (ta && isChg) { st = ta[1]; }
       else {
         const tm = line.match(/오[전후]\d+(?:시\d*분?)?(?:[-~]\S+)?/);
-        st = tm ? tm[0] : (line.includes('오전중') ? '오전중' : line.includes('오후중') ? '오후중' : line.includes('당일중') ? '당일중' : line.includes('첫타임') ? '첫타임' : '');
+        st = tm ? tm[0] : (
+          line.includes('첫타임') ? '첫타임' :
+          line.includes('막타임') ? '막타임' :
+          line.includes('점심이후') || line.includes('점심 이후') ? '점심이후' :
+          line.includes('오전중') ? '오전중' :
+          line.includes('오후중') ? '오후중' :
+          line.includes('당일중') ? '당일중' : '');
       }
       break;
     }
     if (line.includes('당일')) {
       sd = '당일';
       const tm = line.match(/오[전후]\d+(?:시\d*분?)?(?:[-~]\S+)?/);
-      st = tm ? tm[0] : (line.includes('오전중') ? '오전중' : line.includes('오후중') ? '오후중' : '당일중');
+      st = tm ? tm[0] : (
+        line.includes('첫타임') ? '첫타임' :
+        line.includes('막타임') ? '막타임' :
+        line.includes('점심이후') || line.includes('점심 이후') ? '점심이후' :
+        line.includes('오전중') ? '오전중' :
+        line.includes('오후중') ? '오후중' : '당일중');
       break;
     }
   }
@@ -279,16 +291,17 @@ function parseMsg(sender, mlines, chatDate, start, end) {
 }
 
 function classifyTime(st) {
-  // 0=첫타임  1=오전시간  2=오전중  3=오후시간  4=오후중  5=당일중  6=막타임  7=기타(그대로)
-  if (!st) return 7;
-  if (st.includes('막타임')) return 6;
+  // 0=첫타임  1=오전시간  2=오전중  3=점심이후  4=오후시간  5=오후중  6=당일중  7=막타임  8=기타
+  if (!st) return 8;
+  if (st.includes('막타임')) return 7;
   if (st.includes('첫타임')) return 0;
   if (st.includes('오전중')) return 2;
-  if (st.includes('오후중')) return 4;
-  if (st.includes('당일중')) return 5;
+  if (st.includes('점심이후') || st.includes('점심 이후')) return 3;
+  if (st.includes('오후중')) return 5;
+  if (st.includes('당일중')) return 6;
   if (st.startsWith('오전') && /\d/.test(st)) return 1;
-  if (st.startsWith('오후') && /\d/.test(st)) return 3;
-  return 7; // 그 외 텍스트는 그대로
+  if (st.startsWith('오후') && /\d/.test(st)) return 4;
+  return 8;
 }
 
 function timeSortVal(st) {
@@ -399,7 +412,11 @@ async function run() {
   // 순서대로 처리하면서 Map에 upsert → 나중에 온 것이 최신
   function entryKey(e) {
     const ph = e.phone ? e.phone.replace(/[\s\-]/g,'') : '';
-    return ph.length >= 10 ? ph : (e.company + e.address.slice(0,10));
+    const d = e.dateObj;
+    const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+    // 전화번호+날짜로 키 생성 (같은 업체가 다른 날 다른 현장에 있는 경우 구분)
+    if (ph.length >= 10) return `${ph}_${dateStr}`;
+    return `${e.company}_${e.address.slice(0,15)}_${dateStr}`;
   }
 
   const entryMap = new Map(); // key → entry (순서 보존용 배열 인덱스)
@@ -486,18 +503,18 @@ async function run() {
     merges.push({ s:{r:rowIdx,c:0}, e:{r:rowIdx,c:8} });
     rowIdx++;
 
-    // 8개 버킷: 0=첫타임 1=오전시간 2=오전중 3=오후시간 4=오후중 5=당일중 6=막타임 7=기타
-    const buckets = [[], [], [], [], [], [], [], []];
+    // 9개 버킷: 0=첫타임 1=오전시간 2=오전중 3=점심이후 4=오후시간 5=오후중 6=당일중 7=막타임 8=기타
+    const buckets = [[], [], [], [], [], [], [], [], []];
     for (const e of dayEntries) buckets[classifyTime(e.schedTime)].push(e);
     // 오전/오후 시간대만 오름차순 정렬
     buckets[1].sort((a,b) => timeSortVal(a.schedTime) - timeSortVal(b.schedTime));
-    buckets[3].sort((a,b) => timeSortVal(a.schedTime) - timeSortVal(b.schedTime));
+    buckets[4].sort((a,b) => timeSortVal(a.schedTime) - timeSortVal(b.schedTime));
 
     // 실제 출력될 건수 (버킷 합산)
     const actualCount = buckets.reduce((s, b) => s + b.length, 0);
 
     let firstBucket = true;
-    for (let g = 0; g < 8; g++) {
+    for (let g = 0; g < 9; g++) {
       if (!buckets[g].length) continue;
       // 그룹 간 2줄 여백
       if (!firstBucket) {
