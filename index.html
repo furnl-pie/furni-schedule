@@ -312,7 +312,12 @@ function timeSortVal(st) {
 }
 
 function fmtDate(d) {
+  // Date 객체 또는 "YYYY-MM-DD" 문자열 모두 처리 (타임존 오류 방지)
   const days = ['일','월','화','수','목','금','토'];
+  if (typeof d === 'string') {
+    const [y,m,dy] = d.split('-').map(Number);
+    return `${m}월 ${dy}일(${days[new Date(y,m-1,dy).getDay()]})`;
+  }
   return `${d.getMonth()+1}월 ${d.getDate()}일(${days[d.getDay()]})`;
 }
 
@@ -462,11 +467,19 @@ async function run() {
 
   for (const key of Object.keys(dayMap).sort()) {
     const dayEntries = dayMap[key];
-    const d = new Date(key + 'T00:00:00');
-    const label = `📅  ${fmtDate(d)}  (${dayEntries.length}건)`;
+    // key = "2026-03-26" → 직접 파싱 (타임존 오류 방지)
+    const [y, mo, dy] = key.split('-').map(Number);
+    const dayNames = ['일','월','화','수','목','금','토'];
+    const dow = dayNames[new Date(y, mo-1, dy).getDay()];
+    const dateLabel = `📅  ${mo}월 ${dy}일(${dow})`;
 
     // 날짜 헤더 (병합)
-    wsData.push([label,'','','','','','','','']);
+    wsData.push([dateLabel,'','','','','','','','']);
+    merges.push({ s:{r:rowIdx,c:0}, e:{r:rowIdx,c:8} });
+    rowIdx++;
+
+    // 건수 행 (병합) - 날짜 바로 아래
+    wsData.push([`총 ${dayEntries.length}건`,'','','','','','','','']);
     merges.push({ s:{r:rowIdx,c:0}, e:{r:rowIdx,c:8} });
     rowIdx++;
 
@@ -490,7 +503,8 @@ async function run() {
 
       for (const e of buckets[g]) {
         const coStr = e.person ? `${e.company}(${e.person})` : e.company;
-        wsData.push([fmtDate(e.dateObj), coStr, e.address, e.schedTime,
+        const eKey = `${e.dateObj.getFullYear()}-${String(e.dateObj.getMonth()+1).padStart(2,'0')}-${String(e.dateObj.getDate()).padStart(2,'0')}`;
+        wsData.push([fmtDate(eKey), coStr, e.address, e.schedTime,
                      e.phone, e.qty, e.notes, e.pwCommon, e.pwUnit]);
         rowIdx++;
       }
