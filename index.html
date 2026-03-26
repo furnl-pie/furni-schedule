@@ -279,15 +279,16 @@ function parseMsg(sender, mlines, chatDate, start, end) {
 }
 
 function classifyTime(st) {
-  // 0=오전시간, 1=오전중, 2=오후시간, 3=오후중, 4=당일중/기타
-  if (!st) return 4;
-  if (st.includes('당일중')) return 4;
+  // 0=첫타임  1=오전시간  2=오전중  3=오후시간  4=오후중  5=당일중  6=막타임
+  if (!st) return 5;
+  if (st.includes('막타임')) return 6;
   if (st.includes('첫타임')) return 0;
-  if (st.includes('오전중')) return 1;
-  if (st.includes('오후중')) return 3;
-  if (st.startsWith('오전') && /\d/.test(st)) return 0;
-  if (st.startsWith('오후') && /\d/.test(st)) return 2;
-  return 4;
+  if (st.includes('오전중')) return 2;
+  if (st.includes('오후중')) return 4;
+  if (st.includes('당일중')) return 5;
+  if (st.startsWith('오전') && /\d/.test(st)) return 1;
+  if (st.startsWith('오후') && /\d/.test(st)) return 3;
+  return 5;
 }
 
 function timeSortVal(st) {
@@ -484,15 +485,15 @@ async function run() {
     merges.push({ s:{r:rowIdx,c:0}, e:{r:rowIdx,c:8} });
     rowIdx++;
 
-    // 5개 버킷으로 분류
-    const buckets = [[], [], [], [], []];
+    // 7개 버킷: 0=첫타임 1=오전시간 2=오전중 3=오후시간 4=오후중 5=당일중 6=막타임
+    const buckets = [[], [], [], [], [], [], []];
     for (const e of dayEntries) buckets[classifyTime(e.schedTime)].push(e);
-    // 오전/오후 시간대 오름차순 정렬
-    buckets[0].sort((a,b) => timeSortVal(a.schedTime) - timeSortVal(b.schedTime));
-    buckets[2].sort((a,b) => timeSortVal(a.schedTime) - timeSortVal(b.schedTime));
+    // 오전/오후 시간대만 오름차순 정렬
+    buckets[1].sort((a,b) => timeSortVal(a.schedTime) - timeSortVal(b.schedTime));
+    buckets[3].sort((a,b) => timeSortVal(a.schedTime) - timeSortVal(b.schedTime));
 
     let firstBucket = true;
-    for (let g = 0; g < 5; g++) {
+    for (let g = 0; g < 7; g++) {
       if (!buckets[g].length) continue;
       // 그룹 간 2줄 여백
       if (!firstBucket) {
