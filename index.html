@@ -334,6 +334,7 @@ async function run() {
 
   const btn = document.getElementById('runBtn');
   btn.disabled = true;
+  btn.style.background = '';
   document.getElementById('progress').style.display = 'block';
   document.getElementById('result').style.display = 'none';
   document.getElementById('statGrid').style.display = 'none';
@@ -530,10 +531,12 @@ async function run() {
   XLSX.writeFile(wb, fname);
 
   setProgress(100, '완료!');
+  await new Promise(r => setTimeout(r, 400));
+  document.getElementById('progress').style.display = 'none';
 
   // 통계
   const photoCnt = entries.filter(e => e.notes.includes('사진첨부')).length;
-  const uniqueDays = Object.keys(groups).length;
+  const uniqueDays = Object.keys(dayMap).length;
   document.getElementById('statTotal').textContent = entries.length;
   document.getElementById('statDays').textContent  = uniqueDays;
   document.getElementById('statPhoto').textContent = photoCnt;
@@ -541,11 +544,13 @@ async function run() {
 
   const r = document.getElementById('result');
   r.className = 'result ok';
-  r.textContent = `✅ ${fname} 다운로드 완료! 총 ${entries.length}건 / ${uniqueDays}일치 정리됐습니다.`;
+  r.innerHTML = `✅ <b>${fname}</b> 다운로드 완료!<br><span style="font-size:12px;opacity:0.8">날짜를 바꾸고 다시 생성할 수 있어요 👇</span>`;
   r.style.display = 'block';
 
+  // 버튼 및 날짜 입력 재활성화
   btn.textContent = '다시 생성하기';
-  btn.className = 'btn success';
+  btn.className = 'btn';
+  btn.style.background = '#217346';
   btn.disabled = false;
 }
 </script>
